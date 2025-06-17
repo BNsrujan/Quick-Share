@@ -3,7 +3,7 @@
 
 ## **Why Are We Building This?**
 
-Traditional file-sharing methods have major drawbacks:
+Traditional file-sharing methods have major drawbacks:;
 
 - **Slow Transfers**: Large files take too much time to send.
 - **Quality Loss**: Platforms like WhatsApp reduce image quality.
