@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: signaling-server-config
+  namespace: quick-share
+data:
+  NODE_ENV: "production"
+  PORT: "3001"
+  REDIS_URL: "redis://redis-service:6379"
+  CORS_ORIGIN: "*"
+  LOG_LEVEL: "info"
+  ENABLE_METRICS: "true"
+  METRICS_INTERVAL: "60000"
+  METRICS_RETENTION: "604800"
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "100"

@@ -24,3 +24,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* Toggle switch styles */
+.toggle-checkbox:checked {
+  right: 0;
+  border-color: #3b82f6;
+}
+.toggle-checkbox:checked + .toggle-label {
+  background-color: #3b82f6;
+}
+.toggle-checkbox {
+  right: 6px;
+  transition: all 0.3s;
+}
+.toggle-label {
+  transition: background-color 0.3s;
+}
