@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Quick-share
 
 ## **Why Are We Building This?**
