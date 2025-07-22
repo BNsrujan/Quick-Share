@@ -38,6 +38,9 @@ export default function ReceivePage() {
       // Join room with the provided code
       await actions.joinRoom(code);
       
+      // Start listening for file transfer
+      await actions.startTransfer();
+      
       // Show success toast
       showToast('Connected successfully! Waiting for file transfer to start.', 'success');
       
@@ -73,16 +76,16 @@ export default function ReceivePage() {
   
   // Handle transfer completion
   useEffect(() => {
-    if (state.status === 'completed' && state.progress) {
+    console.log('🔄 State changed:', { status: state.status, hasBlob: !!state.receivedBlob, progress: state.progress });
+    
+    if (state.status === 'completed' && state.receivedBlob) {
       showToast('File received successfully!', 'success');
       
       // Create a file name based on the transfer metadata if available
       const fileName = fileNameRef.current || 'received-file';
       
       // Trigger file download
-      if (state.receivedBlob) {
-        handleFileReceived(state.receivedBlob, fileName);
-      }
+      handleFileReceived(state.receivedBlob, fileName);
     } else if (state.status === 'error' && state.error) {
       showToast(`Transfer failed: ${state.error.message}`, 'error');
     }

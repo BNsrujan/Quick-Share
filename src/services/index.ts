@@ -9,6 +9,7 @@ export * from './webrtc.service';
 export * from './signaling.service';
 export * from './status-sync.service';
 export * from './p2p.service';
+export * from './standalone-p2p.service';
 export * from './bandwidth-adapter.service';
 export * from './session-security.service';
 export * from './security-validation.service';

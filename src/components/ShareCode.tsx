@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
+import QRCode from 'qrcode';
 
 interface ShareCodeProps {
   code: string;
@@ -16,24 +17,35 @@ interface ShareCodeProps {
 export const ShareCode: React.FC<ShareCodeProps> = ({ code, onCopy }) => {
   const [copied, setCopied] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const [qrCodeError, setQrCodeError] = useState(false);
+  const [qrCodeLoading, setQrCodeLoading] = useState(true);
   
-  // Generate QR code URL
+  // Generate QR code using client-side library
   useEffect(() => {
     if (code) {
-      // Using Google Charts API for QR code generation
-      // In a production app, consider using a client-side QR code library
-      const baseUrl = 'https://chart.googleapis.com/chart';
-      const params = new URLSearchParams({
-        cht: 'qr', // Chart type: QR code
-        chs: '200x200', // Size: 200x200 pixels
-        chl: code, // Content: the share code
-        choe: 'UTF-8', // Encoding
-      });
+      setQrCodeLoading(true);
+      setQrCodeError(false);
       
-      const url = `${baseUrl}?${params.toString()}`;
-      console.log('Generated QR code URL:', url);
-      console.log('Share code:', code, 'Length:', code.length);
-      setQrCodeUrl(url);
+      // Generate QR code as data URL
+      QRCode.toDataURL(code, {
+        width: 200,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      })
+        .then(url => {
+          console.log('Generated QR code data URL');
+          setQrCodeUrl(url);
+          setQrCodeLoading(false);
+        })
+        .catch(err => {
+          console.error('Error generating QR code:', err);
+          setQrCodeError(true);
+          setQrCodeLoading(false);
+        });
     }
   }, [code]);
   
@@ -64,7 +76,27 @@ export const ShareCode: React.FC<ShareCodeProps> = ({ code, onCopy }) => {
       <div className="flex flex-col sm:flex-row items-center gap-6">
         {/* QR Code */}
         <div className="bg-white p-3 rounded-lg shadow-sm">
-          {qrCodeUrl ? (
+          {qrCodeError ? (
+            <div className="w-[150px] h-[150px] bg-gray-100 dark:bg-gray-600 rounded flex flex-col items-center justify-center text-center p-2">
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="24" 
+                height="24" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+                className="text-gray-400 mb-2"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span className="text-xs text-gray-500">QR code unavailable</span>
+            </div>
+          ) : qrCodeUrl && !qrCodeLoading ? (
             <>
               <Image 
                 src={qrCodeUrl} 
@@ -74,9 +106,12 @@ export const ShareCode: React.FC<ShareCodeProps> = ({ code, onCopy }) => {
                 className="rounded"
                 onError={(e) => {
                   console.error('QR Code image failed to load:', e);
+                  setQrCodeError(true);
+                  setQrCodeLoading(false);
                 }}
                 onLoad={() => {
                   console.log('QR Code image loaded successfully');
+                  setQrCodeLoading(false);
                 }}
               />
               {/* Fallback regular img tag in case Next.js Image has issues */}

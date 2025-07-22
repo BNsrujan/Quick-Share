@@ -35,7 +35,7 @@ export async function createServer() {
         connectSrc: ["'self'", "wss:", "ws:"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:"],
+        imgSrc: ["'self'", "data:", "https://chart.googleapis.com"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
         upgradeInsecureRequests: [],

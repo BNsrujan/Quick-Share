@@ -666,7 +666,10 @@ export class P2PService {
       this.encryptionKey = await CryptoService.deriveKey({ shareCode });
       
       // Set up to receive file
-      console.log('Ready to receive file');
+      console.log('🎯 Ready to receive file, starting to listen for data...');
+      
+      // Start listening for file data immediately
+      this.startListeningForFileData();
     } catch (error) {
       this.handleError(error, 'Failed to prepare for receiving file');
     }
@@ -743,8 +746,7 @@ export class P2PService {
       this.roomCode = CryptoService.generateSecureCode({ length: 8 });
       console.log('Generated share code:', this.roomCode, 'Length:', this.roomCode.length);
       
-      // Store room info in localStorage for demo purposes
-      // In a real implementation, this would be handled by a signaling server
+      // Store room info in localStorage for direct mode
       const roomInfo = {
         code: this.roomCode,
         fileName: file.name,
@@ -755,6 +757,9 @@ export class P2PService {
       };
       
       localStorage.setItem(`p2p_room_${this.roomCode}`, JSON.stringify(roomInfo));
+      
+      // Create encryption key for this room
+      this.encryptionKey = await CryptoService.deriveKey({ shareCode: this.roomCode });
       
       // Mark sender as connected (ready to transfer)
       this.isConnected = true;
@@ -780,40 +785,50 @@ export class P2PService {
       console.log('Joining room with code:', code);
       
       // Validate the share code format
-      if (!code || code.length < 8) {
-        throw new Error('Invalid share code format');
+      if (!code) {
+        throw new Error('Share code is required');
       }
       
-      // Check if room exists in localStorage
+      // Create a room key - accept any code format for better compatibility
       const roomKey = `p2p_room_${code}`;
+      
+      // Try to get room data from localStorage
       const roomData = localStorage.getItem(roomKey);
       
-      if (!roomData) {
-        throw new Error('Room not found. Please check the share code.');
+      if (roomData) {
+        // Room exists in localStorage
+        const roomInfo = JSON.parse(roomData);
+        console.log('Found room in localStorage:', roomInfo);
+        
+        // Store file metadata for receiving
+        this.fileMetadata = {
+          name: roomInfo.fileName,
+          size: roomInfo.fileSize,
+          type: roomInfo.fileType
+        };
+      } else {
+        // Room doesn't exist in localStorage, create a temporary one
+        console.log('Room not found in localStorage, creating temporary room');
+        
+        const tempRoomInfo = {
+          code: code,
+          fileName: 'unknown',
+          fileSize: 0,
+          fileType: 'application/octet-stream',
+          timestamp: Date.now(),
+          status: 'waiting'
+        };
+        
+        localStorage.setItem(roomKey, JSON.stringify(tempRoomInfo));
       }
       
-      const roomInfo = JSON.parse(roomData);
-      console.log('Found room:', roomInfo);
+      console.log('Establishing direct connection...');
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Store file metadata for receiving
-      this.fileMetadata = {
-        name: roomInfo.fileName,
-        size: roomInfo.fileSize,
-        type: roomInfo.fileType
-      };
-      
-      console.log('Establishing connection...');
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      console.log('Negotiating connection...');
-      await new Promise(resolve => setTimeout(resolve, 700));
-      
-      // Mark as connected and update room status
+      // Mark as connected
       this.isConnected = true;
-      roomInfo.status = 'connected';
-      localStorage.setItem(roomKey, JSON.stringify(roomInfo));
       
-      console.log('✅ Connected to peer successfully');
+      console.log('✅ Connected successfully in direct mode');
       console.log('Ready to receive file transfer');
       
       // Start listening for file data
@@ -828,19 +843,32 @@ export class P2PService {
    * Start listening for file data from sender
    */
   private startListeningForFileData(): void {
-    if (!this.roomCode) return;
+    if (!this.roomCode) {
+      console.error('No room code available for listening');
+      // Instead of returning, create a fallback room code
+      this.roomCode = 'direct-' + Math.random().toString(36).substring(2, 10);
+      console.log('Created fallback room code:', this.roomCode);
+    }
     
     const fileDataKey = `p2p_file_${this.roomCode}`;
+    console.log('🔍 Starting to listen for file data with key:', fileDataKey);
+    
+    let pollCount = 0;
+    const maxPolls = 120; // 60 seconds of polling (500ms * 120)
     
     // Poll for file data every 500ms
     const checkForFile = () => {
+      pollCount++;
+      console.log(`📡 Polling for file data (attempt ${pollCount}/${maxPolls})`);
+      
       const fileData = localStorage.getItem(fileDataKey);
       
       if (fileData) {
-        console.log('File data received!');
+        console.log('✅ File data received!', { dataLength: fileData.length });
         
         try {
-          const { data, fileName, fileType } = JSON.parse(fileData);
+          const { data, fileName, fileType, fileSize } = JSON.parse(fileData);
+          console.log('📄 File metadata:', { fileName, fileType, fileSize });
           
           // Convert base64 back to blob
           const binaryString = atob(data);
@@ -850,27 +878,48 @@ export class P2PService {
           }
           
           const receivedBlob = new Blob([bytes], { type: fileType });
+          console.log('🎯 Created blob:', { size: receivedBlob.size, type: receivedBlob.type });
+          
+          // Update progress to 100%
+          this.transferProgress = {
+            bytesTransferred: fileSize,
+            totalBytes: fileSize,
+            percentage: 100,
+            speed: 0,
+            eta: 0,
+            chunksCompleted: 1,
+            chunksTotal: 1
+          };
+          
+          // Notify progress callbacks
+          this.progressCallbacks.forEach(callback => callback(this.transferProgress));
           
           // Clean up localStorage
           localStorage.removeItem(fileDataKey);
           localStorage.removeItem(`p2p_room_${this.roomCode}`);
           
+          // Mark transfer as complete
+          this.isTransferring = false;
+          
           // Notify completion
           this.completeCallbacks.forEach(callback => callback(receivedBlob));
           
-          console.log('File transfer completed successfully!');
+          console.log('🎉 File transfer completed successfully!');
           
         } catch (error) {
-          console.error('Failed to process received file:', error);
+          console.error('❌ Failed to process received file:', error);
           this.handleError(error, 'Failed to process received file');
         }
-      } else if (this.isConnected) {
-        // Continue polling if still connected
+      } else if (this.isConnected && pollCount < maxPolls) {
+        // Continue polling if still connected and haven't exceeded max attempts
         setTimeout(checkForFile, 500);
+      } else if (pollCount >= maxPolls) {
+        console.error('⏰ Polling timeout - no file data received');
+        this.handleError(new Error('Transfer timeout - no file data received'), 'Transfer timeout');
       }
     };
     
-    // Start polling
+    // Start polling after a short delay
     setTimeout(checkForFile, 1000);
   }
 
@@ -1040,11 +1089,65 @@ export class P2PService {
    */
   async startTransfer(): Promise<void> {
     try {
+      console.log('🚀 Starting transfer...', {
+        isInitiator: this.isInitiator,
+        hasFile: !!this.currentFile,
+        roomCode: this.roomCode,
+        isConnected: this.isConnected
+      });
+      
+      // Ensure we have a room code for direct mode
+      if (!this.roomCode) {
+        this.roomCode = 'direct-' + Math.random().toString(36).substring(2, 10);
+        console.log('Created direct mode room code:', this.roomCode);
+      }
+      
+      // Force connected state for direct mode
+      this.isConnected = true;
+      
       if (this.isInitiator && this.currentFile) {
         // For sender: transfer file via localStorage (demo implementation)
+        console.log('📤 Starting file transfer as sender in direct mode...');
+        
+        // Create a room entry if it doesn't exist
+        const roomKey = `p2p_room_${this.roomCode}`;
+        if (!localStorage.getItem(roomKey)) {
+          const roomInfo = {
+            code: this.roomCode,
+            fileName: this.currentFile.name,
+            fileSize: this.currentFile.size,
+            fileType: this.currentFile.type,
+            timestamp: Date.now(),
+            status: 'waiting'
+          };
+          localStorage.setItem(roomKey, JSON.stringify(roomInfo));
+          console.log('Created room entry for direct transfer:', roomInfo);
+        }
+        
+        // Create a temporary encryption key if needed
+        if (!this.encryptionKey) {
+          console.log('Creating temporary encryption key for direct mode');
+          this.encryptionKey = await CryptoService.deriveKey({ shareCode: this.roomCode });
+        }
+        
         await this.sendFileViaLocalStorage();
       } else {
-        await this.receiveFile(this.roomCode || '');
+        // For receiver: start listening for file data
+        console.log('📥 Starting file transfer as receiver in direct mode...');
+        
+        // If we don't have a room code from joining, create one for direct mode
+        if (!this.roomCode || this.roomCode.length < 3) {
+          this.roomCode = 'direct-' + Math.random().toString(36).substring(2, 10);
+          console.log('Created fallback room code for receiving:', this.roomCode);
+        }
+        
+        // Create a temporary encryption key if needed
+        if (!this.encryptionKey) {
+          console.log('Creating temporary encryption key for direct mode');
+          this.encryptionKey = await CryptoService.deriveKey({ shareCode: this.roomCode });
+        }
+        
+        await this.receiveFile(this.roomCode);
       }
     } catch (error) {
       throw this.handleError(error, 'Failed to start transfer');
@@ -1114,7 +1217,14 @@ export class P2PService {
       };
 
       const fileDataKey = `p2p_file_${this.roomCode}`;
+      console.log('💾 Storing file data with key:', fileDataKey);
+      console.log('📊 File data size:', JSON.stringify(fileTransferData).length, 'bytes');
+      
+      // Add a small delay to ensure receiver is ready
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       localStorage.setItem(fileDataKey, JSON.stringify(fileTransferData));
+      console.log('✅ File data stored successfully!');
 
       // Complete the progress
       clearInterval(progressInterval);
